@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Rocket Crash Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151d30;
+            --accent: #38bdf8;
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #f59e0b;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; padding: 14px; overflow: hidden; }
+
+        /* Шапка */
+        .header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 16px; border-radius: 14px; border: 1px solid #1e293b; }
+        .balance-box { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; color: var(--accent); }
+        .nav-btns { display: flex; gap: 6px; }
+        .btn-top { border: none; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: 0.15s; }
+        .btn-deposit { background: #0284c7; color: white; }
+        .btn-withdraw { background: #be123c; color: white; }
+
+        /* Поле игры */
+        .game-area { flex-grow: 1; background: var(--card-bg); margin: 12px 0; border-radius: 18px; border: 1px solid #1e293b; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .multiplier-val { font-size: 60px; font-weight: 900; color: var(--green); z-index: 2; text-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+        .multiplier-val.crashed { color: var(--red) !important; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important; }
+        .game-status { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-sub); z-index: 2; margin-top: 6px; }
+
+        /* Блок управления ставкой */
+        .controls { background: var(--card-bg); padding: 14px; border-radius: 18px; border: 1px solid #1e293b; display: flex; flex-direction: column; gap: 10px; }
+        .quick-bets { display: flex; gap: 6px; }
+        .quick-btn { flex: 1; background: #1e293b; border: 1px solid #334155; color: var(--text-sub); padding: 6px 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        
+        .bet-row { display: flex; gap: 8px; }
+        .bet-input { flex-grow: 1; background: #0b0f19; border: 1px solid #334155; border-radius: 10px; padding: 12px 14px; font-size: 16px; color: white; outline: none; }
+        
+        .main-btn { width: 100%; border: none; padding: 15px; border-radius: 12px; font-size: 17px; font-weight: 800; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
+        .btn-bet { background: var(--green); color: white; }
+        .btn-cashout { background: var(--yellow); color: #000; }
+        .main-btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+        /* Модальные окна */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; padding: 16px; }
+        .modal-body { background: var(--card-bg); border: 1px solid #334155; border-radius: 18px; width: 100%; max-width: 360px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .modal-body h3 { font-size: 18px; color: var(--text-main); }
+        .shop-row { display: flex; justify-content: space-between; align-items: center; background: #0b0f19; border: 1px solid #1e293b; padding: 12px 14px; border-radius: 10px; }
+        .btn-buy-star { background: #fbbf24; color: #000; border: none; font-weight: 800; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+        
+        .input-group label { display: block; font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+        .input-text { width: 100%; background: #0b0f19; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; color: white; font-size: 14px; outline: none; }
+        .fee-card { background: #0b0f19; border-radius: 10px; padding: 10px; font-size: 13px; line-height: 1.5; color: var(--text-sub); }
+        .fee-card b { color: var(--text-main); }
+        .btn-modal-action { background: var(--green); color: white; border: none; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .btn-modal-close { background: #334155; color: white; border: none; padding: 10px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- Верхняя панель -->
+    <div class="header">
+        <div class="balance-box">🪙 <span id="balance">0</span></div>
+        <div class="nav-btns">
+            <button class="btn-top btn-deposit" onclick="openModal('shopModal')">+ Пополнить</button>
+            <button class="btn-top btn-withdraw" onclick="openModal('withdrawModal')">Вывод</button>
+        </div>
+    </div>
+
+    <!-- Область графики и множителя -->
+    <div class="game-area">
+        <canvas id="gameCanvas"></canvas>
+        <div id="multiplierDisplay" class="multiplier-val">1.00x</div>
+        <div id="gameStatus" class="game-status">Ожидание ставки</div>
+    </div>
+
+    <!-- Панель ставок -->
+    <div class="controls">
+        <div class="quick-bets">
+            <button class="quick-btn" onclick="setQuickBet(10)">+10</button>
+            <button class="quick-btn" onclick="setQuickBet(50)">+50</button>
+            <button class="quick-btn" onclick="setQuickBet(100)">+100</button>
+            <button class="quick-btn" onclick="setQuickBet('all')">MAX</button>
+        </div>
+        <div class="bet-row">
+            <input type="number" id="betInput" class="bet-input" placeholder="Ставка (монет)" min="0" value="0">
+        </div>
+        <button id="actionBtn" class="main-btn btn-bet" onclick="handleActionClick()">Старт</button>
+    </div>
+
+    <!-- Модальное окно: Пополнение (Звёзды ⭐) -->
+    <div id="shopModal" class="modal">
+        <div class="modal-body">
+            <h3>Пополнение (Telegram Stars)</h3>
+            <p style="font-size: 13px; color: var(--text-sub);">Выберите пакет монет для покупки:</p>
+            
+            <div class="shop-row">
+                <span>50 монет</span>
+                <button class="btn-buy-star" onclick="buyStars(50, 25)">25 ⭐</button>
+            </div>
+            <div class="shop-row">
+                <span>100 монет</span>
+                <button class="btn-buy-star" onclick="buyStars(100, 50)">50 ⭐</button>
+            </div>
+            <div class="shop-row">
+                <span>250 монет</span>
+                <button class="btn-buy-star" onclick="buyStars(250, 100)">100 ⭐</button>
+            </div>
+
+            <button class="btn-modal-close" onclick="closeModal('shopModal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно: Вывод (Комиссия 20%) -->
+    <div id="withdrawModal" class="modal">
+        <div class="modal-body">
+            <h3>Вывод монет</h3>
+            
+            <div class="input-group">
+                <label>Сумма вывода (монет):</label>
+                <input type="number" id="withdrawAmount" class="input-text" placeholder="Минимум 10" oninput="calculateWithdrawFee()">
+            </div>
+
+            <div class="input-group">
+                <label>TON Кошелек / Реквизиты:</label>
+                <input type="text" id="withdrawWallet" class="input-text" value="UQBVsVDwcOyC4PoCTTizOf7N1gcCAcm5YE8eLwKCa7XrmP99">
+            </div>
+
+            <div class="fee-card">
+                <div>Комиссия (20%): <b id="feeVal">0</b> 🪙</div>
+                <div>Будет выплачено: <b id="receiveVal" style="color: var(--green);">0</b> 🪙</div>
+            </div>
+
+            <button class="btn-modal-action" onclick="submitWithdraw()">Заказать вывод</button>
+            <button class="btn-modal-close" onclick="closeModal('withdrawModal')">Отмена</button>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
+
+        // 1. Изначально баланс = 0
+        let userBalance = parseInt(localStorage.getItem('crash_coins_balance')) || 0;
+        let activeBet = 0;
+        let inRound = false;
+        let cashedOut = false;
+        let currentMultiplier = 1.00;
+        let crashPoint = 1.00;
+        let gameTimer = null;
+
+        const balanceEl = document.getElementById('balance');
+        const multEl = document.getElementById('multiplierDisplay');
+        const statusEl = document.getElementById('gameStatus');
+        const actionBtn = document.getElementById('actionBtn');
+        const betInput = document.getElementById('betInput');
+
+        function updateBalanceView() {
+            balanceEl.innerText = userBalance;
+            localStorage.setItem('crash_coins_balance', userBalance);
+        }
+        updateBalanceView();
+
+        function setQuickBet(val) {
+            if (val === 'all') {
+                betInput.value = userBalance;
+            } else {
+                let current = parseInt(betInput.value) || 0;
+                betInput.value = current + val;
+            }
+        }
+
+        // 2. Расчет краша по заданным условиям
+        function getCrashPoint(hasBet) {
+            if (!hasBet) {
+                // Если ставка НЕ сделана: краш ВСЕГДА >= 2.00x (от 2.00 до 6.50)
+                return +(2.00 + Math.random() * 4.50).toFixed(2);
+            } else {
+                // Если ставка СДЕЛАНА: шансы занижены
+                const r = Math.random();
+                if (r < 0.50) {
+                    // 50% шанс: сгорает от 1.02x до 1.35x
+                    return +(1.02 + Math.random() * 0.33).toFixed(2);
+                } else if (r < 0.85) {
+                    // 35% шанс: сгорает от 1.36x до 1.95x (не доходя до 2x)
+                    return +(1.36 + Math.random() * 0.59).toFixed(2);
+                } else {
+                    // 15% шанс: редкий проход выше 2x
+                    return +(2.01 + Math.random() * 1.50).toFixed(2);
+                }
+            }
+        }
+
+        function handleActionClick() {
+            if (!inRound) {
+                const betVal = parseInt(betInput.value) || 0;
+                
+                if (betVal > userBalance) {
+                    alert('Недостаточно монет! Сначала пополните баланс.');
+                    openModal('shopModal');
+                    return;
+                }
+
+                activeBet = betVal;
+                if (activeBet > 0) {
+                    userBalance -= activeBet;
+                    updateBalanceView();
+                }
+
+                startCrashRound();
+            } else {
+                claimCashout();
+            }
+        }
+
+        function startCrashRound() {
+            inRound = true;
+            cashedOut = false;
+            currentMultiplier = 1.00;
+            
+            const hasBet = activeBet > 0;
+            crashPoint = getCrashPoint(hasBet);
+
+            multEl.classList.remove('crashed');
+            statusEl.innerText = hasBet ? `Ставка: ${activeBet} монет` : 'Демо-раунд (без ставки)';
+            
+            if (hasBet) {
+                actionBtn.className = 'main-btn btn-cashout';
+                actionBtn.innerText = 'Забрать';
+            } else {
+                actionBtn.disabled = true;
+                actionBtn.innerText = 'Полёт...';
+            }
+
+            // Плавное ускорение множителя
+            let step = 0.02;
+            gameTimer = setInterval(() => {
+                currentMultiplier = +(currentMultiplier + step).toFixed(2);
+                step += 0.001; // небольшое ускорение со временем
+                multEl.innerText = currentMultiplier.toFixed(2) + 'x';
+
+                if (currentMultiplier >= crashPoint) {
+                    handleCrash();
+                }
+            }, 70);
+        }
+
+        function claimCashout() {
+            if (!inRound || cashedOut || activeBet <= 0) return;
+            cashedOut = true;
+
+            const winAmount = Math.floor(activeBet * currentMultiplier);
+            userBalance += winAmount;
+            updateBalanceView();
+
+            actionBtn.disabled = true;
+            actionBtn.innerText = `Забрано: +${winAmount} 🪙`;
+        }
+
+        function handleCrash() {
+            clearInterval(gameTimer);
+            inRound = false;
+
+            multEl.classList.add('crashed');
+            multEl.innerText = crashPoint.toFixed(2) + 'x';
+            statusEl.innerText = 'КРАШ!';
+
+            actionBtn.disabled = false;
+            actionBtn.className = 'main-btn btn-bet';
+            actionBtn.innerText = 'Старт';
+        }
+
+        // 3. Покупка звёздами
+        function buyStars(coins, stars) {
+            // В боевом режиме вызывается: tg.openInvoice(link)
+            userBalance += coins;
+            updateBalanceView();
+            alert(`Успешно начислено ${coins} монет за ${stars} ⭐ (демо-пополнение)!`);
+            closeModal('shopModal');
+        }
+
+        // 4. Вывод с комиссией 20%
+        function calculateWithdrawFee() {
+            const amount = parseInt(document.getElementById('withdrawAmount').value) || 0;
+            const fee = Math.round(amount * 0.20);
+            const payout = amount - fee;
+
+            document.getElementById('feeVal').innerText = amount > 0 ? fee : 0;
+            document.getElementById('receiveVal').innerText = amount > 0 ? payout : 0;
+        }
+
+        function submitWithdraw() {
+            const amount = parseInt(document.getElementById('withdrawAmount').value) || 0;
+            const wallet = document.getElementById('withdrawWallet').value.trim();
+
+            if (amount <= 0 || amount > userBalance) {
+                alert('Некорректная сумма или недостаточно средств на балансе!');
+                return;
+            }
+            if (!wallet) {
+                alert('Укажите адрес кошелька!');
+                return;
+            }
+
+            const fee = Math.round(amount * 0.20);
+            const payout = amount - fee;
+
+            userBalance -= amount;
+            updateBalanceView();
+
+            // Отправка данных боту
+            if (tg) {
+                tg.sendData(JSON.stringify({
+                    action: 'withdraw_request',
+                    requestedAmount: amount,
+                    commission20: fee,
+                    payoutAmount: payout,
+                    tonWallet: wallet
+                }));
+            }
+
+            alert(`Заявка создана!\nСписано: ${amount} 🪙\nКомиссия (20%): ${fee} 🪙\nК выплате: ${payout} 🪙\nНа адрес: ${wallet.substring(0, 8)}...`);
+            closeModal('withdrawModal');
+            document.getElementById('withdrawAmount').value = '';
+            calculateWithdrawFee();
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    </script>
+</body>
+</html>
